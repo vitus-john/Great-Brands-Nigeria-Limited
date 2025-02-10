@@ -75,13 +75,9 @@ This is a Node.js-based Event Booking API that includes authentication, event ma
    ```
 4. Run the server:
    ```sh
-   npm start
-   ```
-   or
-   
-   ```sh
    npm run dev
    ```
+  
 
 ## Testing & Coverage
 - **Unit Testing**: Implemented tests for authentication and event management
