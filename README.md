@@ -78,6 +78,7 @@ This is a Node.js-based Event Booking API that includes authentication, event ma
    npm start
    ```
    or
+   
    ```sh
    npm run dev
    ```
