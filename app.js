@@ -44,12 +44,16 @@ app.use(
 );
 
 // Apply verifyToken middleware to all booking routes
-app.use(verifyToken);
+
 // Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/events", eventRoutes);
-app.use("/api/bookings", bookingRoutes);
-app.use("/api/payments", paymentRoutes); // ✅ Fix incorrect import
+app.use("/api/events", verifyToken, eventRoutes);
+app.use("/api/bookings", verifyToken, bookingRoutes);
+app.use("/api/payments", verifyToken, paymentRoutes);
+
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Test route is working' });
+});
 
 // Schedule a task to run daily at midnight
 cron.schedule("0 0 * * *", async () => {

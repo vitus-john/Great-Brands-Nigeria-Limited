@@ -2,34 +2,59 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { generateOTP, sendEmail, sendOTPEmail } = require('../utils/email');
 const { generateTokens } = require("../utils/jwt");
-const { db, redisClient } = require("../config/db"); // Import MySQL pool & Redis
+const { db, redisClient, queryDatabase } = require("../config/db"); // Import MySQL pool & Redis
 const { createUser, findUserByEmail, verifyUser } = require("../models/userModel");
 require("dotenv").config();
 
 // Helper function to check Redis connection
-const isRedisConnected = redisClient && redisClient.isReady;
+const isRedisAvailable = async () => {
+  try {
+    if (!redisClient.isReady) {
+      await redisClient.connect();
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 
 // Register User
 const registerUser = async (req, res) => {
   try {
-    const { firstname, lastname, username, email, password } = req.body;
-    
-    const existingUser = await findUserByEmail(email);
-    if (existingUser) return res.status(400).json({ message: "User already exists" });
+    const { name, username, email, password } = req.body;
 
+    if (!name || !username || !email || !password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    console.log("🔍 Checking if user exists:", email);
+    const existingUser = await queryDatabase("SELECT * FROM users WHERE email = ?", [email]);
+
+    if (existingUser.length > 0) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    // ✅ Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const userId = await createUser({ firstname, lastname, username, email, password: hashedPassword, role: 'user' });
+    console.log("✅ Hashed Password:", hashedPassword);
 
-    const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    await sendEmail({ firstname, email }, token);
+    // ✅ Insert user into the database
+    const insertQuery = `INSERT INTO users (name, username, email, password) VALUES (?, ?, ?, ?)`;
+    const result = await queryDatabase(insertQuery, [name, username, email, hashedPassword]);
 
-    res.status(201).json({ message: "Check your email for verification" });
+    if (result.affectedRows > 0) {
+      console.log("✅ User registered successfully:", email);
+      return res.status(201).json({ message: "User registered successfully" });
+    } else {
+      console.log("❌ User registration failed");
+      return res.status(500).json({ message: "User registration failed" });
+    }
   } catch (error) {
-    res.status(500).json({ message: "Error registering user", error });
+    console.error("❌ Registration Error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
-
 // Verify User
 const verifyUserController = async (req, res) => {
   try {
@@ -47,8 +72,11 @@ const verifyUserController = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log('Logging in user:', { email });
+
     const connection = await db.getConnection();
-    
+    console.log('Database connection acquired');
+
     try {
       const [results] = await connection.execute(
         "SELECT id, email, password, role, isVerified FROM users WHERE email = ?", 
@@ -60,6 +88,7 @@ const loginUser = async (req, res) => {
       }
 
       const user = results[0];
+      console.log('User found:', user);
 
       if (!(await bcrypt.compare(password, user.password))) {
         return res.status(400).json({ message: "Invalid credentials" });
@@ -71,18 +100,22 @@ const loginUser = async (req, res) => {
 
       // Generate JWT Tokens
       const { accessToken, refreshToken } = generateTokens(user);
+      console.log('Tokens generated');
 
       // Store Refresh Token & Mark User as Active in Redis
-      if (isRedisConnected) {
+      if (isRedisAvailable) {
         await redisClient.setEx(`refreshToken:${user.id}`, 7 * 24 * 60 * 60, refreshToken);
         await redisClient.setEx(`user:${user.id}:status`, 900, "online");
+        console.log('Tokens stored in Redis');
       }
 
       res.json({ message: "Login successful", accessToken, refreshToken });
     } finally {
       connection.release();
+      console.log('Database connection released');
     }
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: "Login error", error });
   }
 };
@@ -123,20 +156,16 @@ const verifyOtp = async (req, res) => {
 };
 
 
-exports.getUserProfile = (req, res) => {
-    const userId = req.user.id;
-  
-    // Fetch user profile from MySQL
-    db.query("SELECT id, email, username FROM users WHERE id = ?", [userId], (err, results) => {
-      if (err) return res.status(500).json({ error: "Database error" });
-  
-      if (results.length === 0) {
-        return res.status(404).json({ error: "User not found" });
-      }
-  
-      res.status(200).json(results[0]);
-    });
-  };
+exports.getUserProfile = async (req, res) => {
+  try {
+    const [results] = await db.execute("SELECT id, email, username FROM users WHERE id = ?", [req.user.id]);
+    if (results.length === 0) return res.status(404).json({ error: "User not found" });
+    res.status(200).json(results[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Database error", details: err.message });
+  }
+};
+
 
   const verifyRole = (roles) => {
     return (req, res, next) => {
@@ -155,7 +184,7 @@ exports.getUserProfile = (req, res) => {
   
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
   
-      if (isRedisConnected) {
+      if (isRedisAvailable) {
         await redisClient.del(`refreshToken:${decoded.id}`);
         await redisClient.del(`user:${decoded.id}:status`);
         await redisClient.setEx(`blacklist:${token}`, 900, "expired");
