@@ -2,11 +2,11 @@ const express = require("express");
 const { body } = require("express-validator");
 const { 
   registerUser, 
-  verifyUserController, 
   loginUser, 
   verifyOtp, 
   getLoggedInUser, 
-  logoutUser 
+  logoutUser, 
+  verifyUser
 } = require("../controllers/authController");
 
 const { verifyToken } = require("../middleware/authMiddleware");
@@ -28,7 +28,7 @@ const loginValidation = [
 
 // Routes
 router.post("/register", registerValidation, registerUser);
-router.get("/verify/:token", verifyUserController);
+router.get("/verify/:token", verifyUser);
 router.post("/login", loginValidation, loginUser);
 router.post("/verify-otp", verifyOtp);
 router.get("/logout", verifyToken, logoutUser);

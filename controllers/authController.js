@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const { generateOTP, sendEmail, sendOTPEmail } = require('../utils/email');
 const { generateTokens } = require("../utils/jwt");
 const { db, redisClient, queryDatabase } = require("../config/db"); // Import MySQL pool & Redis
-const { createUser, findUserByEmail, verifyUser } = require("../models/userModel");
+
 require("dotenv").config();
 
 // Helper function to check Redis connection
@@ -22,7 +22,7 @@ const isRedisAvailable = async () => {
 // Register User
 const registerUser = async (req, res) => {
   try {
-    const { name, username, email, password } = req.body;
+    const { name, username, email, password, role } = req.body;
 
     if (!name || !username || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
@@ -39,13 +39,19 @@ const registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     console.log("✅ Hashed Password:", hashedPassword);
 
+    const otp = generateOTP(); // Generate OTP
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
     // ✅ Insert user into the database
-    const insertQuery = `INSERT INTO users (name, username, email, password) VALUES (?, ?, ?, ?)`;
-    const result = await queryDatabase(insertQuery, [name, username, email, hashedPassword]);
+    const insertQuery = `INSERT INTO users (name, email, password, username, role, isVerified, otp, otpExpires, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
+    const result = await queryDatabase(insertQuery, [name, email, hashedPassword, username, role, 0, otp, otpExpires]);
+
+    const user = { id: result.insertId, email, name, otp };
+    await sendOTPEmail(user, otp); // Send OTP email
 
     if (result.affectedRows > 0) {
       console.log("✅ User registered successfully:", email);
-      return res.status(201).json({ message: "User registered successfully" });
+      return res.status(201).json({ message: "Registration successful. Verify your email using the OTP sent." });
     } else {
       console.log("❌ User registration failed");
       return res.status(500).json({ message: "User registration failed" });
@@ -56,17 +62,33 @@ const registerUser = async (req, res) => {
   }
 };
 // Verify User
-const verifyUserController = async (req, res) => {
+const verifyUser = async (req, res) => {
   try {
-    const token = req.params.token;
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { token } = req.params;
 
-    await verifyUser(decoded.id);
-    res.redirect('/success');
+    if (!token) {
+      return res.status(400).json({ message: "Invalid verification token" });
+    }
+
+    console.log("🔍 Verifying token:", token);
+    const result = await queryDatabase("SELECT * FROM users WHERE verificationToken = ?", [token]);
+
+    if (result.length === 0) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    // ✅ Mark user as verified
+    await queryDatabase("UPDATE users SET isVerified = 1, verificationToken = NULL WHERE verificationToken = ?", [token]);
+    console.log("✅ User verified successfully");
+
+    res.json({ message: "Account verified successfully. You can now log in." });
   } catch (error) {
-    res.status(400).json({ message: "Invalid or expired verification link" });
+    console.error("❌ Verification Error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
 
 // Login User
 const loginUser = async (req, res) => {
@@ -125,35 +147,43 @@ const loginUser = async (req, res) => {
 const verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
+    const connection = await db.getConnection();
 
-    const storedOTP = redisClient.isReady ? await redisClient.get(`otp:${email}`) : null;
+    try {
+      const [results] = await connection.execute(
+        "SELECT id, otp, otpExpires FROM users WHERE email = ?", 
+        [email]
+      );
 
-    if (!storedOTP || storedOTP !== otp) {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
+      if (results.length === 0) {
+        return res.status(400).json({ message: "Invalid email or OTP" });
+      }
+
+      const user = results[0];
+
+      // Check OTP expiration
+      if (new Date() > new Date(user.otpExpires)) {
+        return res.status(400).json({ message: "OTP expired. Request a new one." });
+      }
+
+      // Verify OTP
+      if (user.otp !== otp) {
+        return res.status(400).json({ message: "Invalid OTP" });
+      }
+
+      // Mark user as verified
+      await connection.execute("UPDATE users SET isVerified = 1, otp = NULL, otpExpires = NULL WHERE id = ?", [user.id]);
+
+      res.json({ message: "Account verified successfully. You can now log in." });
+    } finally {
+      connection.release();
     }
-
-    const [results] = await db.execute("SELECT id, email FROM users WHERE email = ?", [email]);
-
-    if (results.length === 0) {
-      return res.status(400).json({ message: "User not found" });
-    }
-
-    const user = results[0];
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
-
-    // Delete OTP from Redis
-    await redisClient.del(`otp:${email}`);
-
-    res.json({ message: "Login successful", token });
   } catch (error) {
+    console.error("OTP verification error:", error);
     res.status(500).json({ message: "OTP verification error", error });
   }
 };
+
 
 
 exports.getUserProfile = async (req, res) => {
@@ -217,4 +247,4 @@ exports.getUserProfile = async (req, res) => {
   };
   
   
-module.exports = { registerUser, verifyUserController, loginUser, verifyOtp, getLoggedInUser, logoutUser };
+module.exports = { registerUser, verifyUser , loginUser, verifyOtp, getLoggedInUser, logoutUser };

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>12/12</span>
+                <span class='fraction'>15/15</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>12/12</span>
+                <span class='fraction'>15/15</span>
             </div>
         
             
@@ -95,32 +95,42 @@
 <a name='L30'></a><a href='#L30'>30</a>
 <a name='L31'></a><a href='#L31'>31</a>
 <a name='L32'></a><a href='#L32'>32</a>
-<a name='L33'></a><a href='#L33'>33</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
@@ -129,17 +139,25 @@
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const express = require("express");
 const { body } = require("express-validator");
-const { registerUser, verifyUserController, loginUser, verifyOtp } = require("../controllers/authController");
+const { 
+  registerUser, 
+  verifyUserController, 
+  loginUser, 
+  verifyOtp, 
+  getLoggedInUser, 
+  logoutUser 
+} = require("../controllers/authController");
 &nbsp;
+const { verifyToken } = require("../middleware/authMiddleware");
+verifyToken
 const router = express.Router();
 &nbsp;
-// Validation Rules
+// Validation rules
 const registerValidation = [
-  body("firstname").notEmpty().withMessage("Firstname is required"),
-  body("lastname").notEmpty().withMessage("Lastname is required"),
+  body("name").notEmpty().withMessage("Name is required"),
   body("username").notEmpty().withMessage("Username is required"),
   body("email").isEmail().withMessage("Valid email is required"),
-  body("password").isLength({ min: 6 }).withMessage("Password must be at least 6 characters"),
+  body("password").isLength({ min: 6 }).withMessage("Password must be at least 6 characters long"),
 ];
 &nbsp;
 const loginValidation = [
@@ -147,16 +165,13 @@ const loginValidation = [
   body("password").notEmpty().withMessage("Password is required"),
 ];
 &nbsp;
-const otpValidation = [
-  body("email").isEmail().withMessage("Valid email is required"),
-  body("otp").notEmpty().withMessage("OTP is required"),
-]; 
-&nbsp;
 // Routes
 router.post("/register", registerValidation, registerUser);
 router.get("/verify/:token", verifyUserController);
 router.post("/login", loginValidation, loginUser);
-router.post("/verify-otp", otpValidation, verifyOtp);
+router.post("/verify-otp", verifyOtp);
+router.get("/logout", verifyToken, logoutUser);
+router.get("/me", verifyToken, getLoggedInUser);
 &nbsp;
 module.exports = router;
 &nbsp;</pre></td></tr></table></pre>
@@ -166,7 +181,7 @@ module.exports = router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-02-10T19:30:15.292Z
+                at 2025-02-11T09:57:19.461Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

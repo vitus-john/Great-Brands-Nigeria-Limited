@@ -67,10 +67,6 @@ async function connectRedis() {
   }
 }
 
-// Handle Redis errors
-redisClient.on("error", (err) => {
-  console.error("❌ Redis Error:", err);
-});
 
 connectRedis();
 

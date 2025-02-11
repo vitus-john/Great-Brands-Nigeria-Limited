@@ -32,15 +32,5 @@ const findUserByEmail = async (email) => {
   });
 };
 
-// Verify User
-const verifyUser = async (userId) => {
-  return new Promise((resolve, reject) => {
-    const sql = "UPDATE users SET isVerified = 1 WHERE id = ?";
-    db.query(sql, [userId], (err, results) => {
-      if (err) return reject(err);
-      resolve(results);
-    });
-  });
-};
 
-module.exports = { createUser, findUserByEmail, verifyUser };
+module.exports = { createUser, findUserByEmail };
